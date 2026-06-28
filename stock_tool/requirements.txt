@@ -1,0 +1,23 @@
+# Phase 1 — runtime dependencies (per StockTool_Spec.md §10)
+PyQt6>=6.6.0
+pyqtgraph>=0.13.3
+yfinance>=0.2.37
+pandas>=2.1.0
+# pandas-ta dropped: incompatible with numpy>=2.0 (uses removed np.NaN).
+# Indicators are implemented in pure pandas/numpy in core/indicator_engine.py.
+numpy>=1.26.0
+requests>=2.31.0
+feedparser>=6.0.10
+pyyaml>=6.0.1
+Pillow>=10.2.0
+
+# Phase 2
+APScheduler>=3.10.4
+openpyxl>=3.1.0
+
+# Phase 3
+ib_insync>=0.9.86
+discord.py>=2.3.2
+
+# AI candlestick backtester
+scikit-learn>=1.4.0

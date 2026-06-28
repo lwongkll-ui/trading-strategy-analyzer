@@ -1,0 +1,42 @@
+data:
+  price_dir: "./data/prices"
+  export_dir: "./data/exports"
+
+download:
+  default_start_date: "2010-01-01"
+  provider: "yfinance"           # yfinance | alpha_vantage
+  alpha_vantage_key: ""
+
+news:
+  provider: "newsapi"            # newsapi | rss
+  newsapi_key: ""
+  max_headlines: 20
+
+chart:
+  default_timeframe: "D"
+  candle_bull_color: "#26a69a"
+  candle_bear_color: "#ef5350"
+  background_color: "#131722"
+  ma_colors: ["#2196F3", "#FF9800", "#E91E63", "#9C27B0", "#00BCD4"]
+  export_resolution: [1920, 1080]
+
+indicators:
+  rsi_period: 14
+  rsi_overbought: 70
+  rsi_oversold: 30
+  macd_fast: 12
+  macd_slow: 26
+  macd_signal: 9
+  stc_fast: 23
+  stc_slow: 50
+  stc_cycle: 10
+  bb_period: 20
+  bb_std: 2.0
+  atr_period: 14
+  stoch_k: 14
+  stoch_d: 3
+
+scheduler:
+  enabled: false
+  cron: "0 18 * * 1-5"           # Weekdays at 6pm
+  symbols_file: "./watchlist.txt"
