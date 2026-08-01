@@ -186,6 +186,28 @@ class ChartPanel(QtWidgets.QWidget):
         self._tooltip.hide()
         self._plot_item.addItem(self._tooltip, ignoreBounds=True)
 
+        # Axis-edge labels that track the crosshair position
+        _label_brush = pg.mkBrush(50, 50, 50, 220)
+        _label_pen = pg.mkPen("#888888", width=1)
+
+        # Price tag on the Y-axis (left edge): left-center anchored so it grows rightward
+        self._price_axis_label = pg.TextItem(
+            text="", color="#ffffff", anchor=(0.0, 0.5),
+            fill=_label_brush, border=_label_pen,
+        )
+        self._price_axis_label.setZValue(110)
+        self._price_axis_label.hide()
+        self._plot_item.addItem(self._price_axis_label, ignoreBounds=True)
+
+        # Date tag on the X-axis (bottom edge): bottom-center anchored so it grows upward
+        self._date_axis_label = pg.TextItem(
+            text="", color="#ffffff", anchor=(0.5, 1.0),
+            fill=_label_brush, border=_label_pen,
+        )
+        self._date_axis_label.setZValue(110)
+        self._date_axis_label.hide()
+        self._plot_item.addItem(self._date_axis_label, ignoreBounds=True)
+
         self._plot_item.scene().sigMouseMoved.connect(self._on_mouse_moved)
         self._view_box.sigXRangeChanged.connect(self._fit_y_to_visible)
 
@@ -214,6 +236,8 @@ class ChartPanel(QtWidgets.QWidget):
         self._tooltip.hide()
         self._crosshair_v.hide()
         self._crosshair_h.hide()
+        self._price_axis_label.hide()
+        self._date_axis_label.hide()
 
     @property
     def data(self) -> pd.DataFrame | None:
@@ -538,36 +562,61 @@ class ChartPanel(QtWidgets.QWidget):
             self._tooltip.hide()
             self._crosshair_v.hide()
             self._crosshair_h.hide()
+            self._price_axis_label.hide()
+            self._date_axis_label.hide()
             self.sigCrosshairMoved.emit(None)
             return
 
         view_pt = self._view_box.mapSceneToView(scene_pos)
         bar = int(round(view_pt.x()))
         n = len(self._df)
-        if not (0 <= bar < n):
+
+        if bar < 0:
             self._tooltip.hide()
             self._crosshair_v.hide()
             self._crosshair_h.hide()
+            self._price_axis_label.hide()
+            self._date_axis_label.hide()
             self.sigCrosshairMoved.emit(None)
             return
 
+        # Crosshairs and price label are always shown for bar >= 0
         self._crosshair_v.setPos(bar)
         self._crosshair_h.setPos(view_pt.y())
         self._crosshair_v.show()
         self._crosshair_h.show()
-        self.sigCrosshairMoved.emit(float(bar))
 
-        row = self._df.iloc[bar]
-        date_str = self._df.index[bar].strftime("%Y-%m-%d")
-        text = (
-            f"{date_str}\n"
-            f"O {row['Open']:.2f}  H {row['High']:.2f}\n"
-            f"L {row['Low']:.2f}  C {row['Close']:.2f}\n"
-            f"V {int(row['Volume']):,}"
-        )
-        self._tooltip.setText(text)
-        self._tooltip.setPos(view_pt.x(), view_pt.y())
-        self._tooltip.show()
+        x_range, y_range = self._view_box.viewRange()
+        self._price_axis_label.setText(f" {view_pt.y():.2f} ")
+        self._price_axis_label.setPos(x_range[0], view_pt.y())
+        self._price_axis_label.show()
+
+        if bar < n:
+            # Cursor over real data — show full OHLCV tooltip
+            self.sigCrosshairMoved.emit(float(bar))
+            row = self._df.iloc[bar]
+            date_str = self._df.index[bar].strftime("%Y-%m-%d")
+            text = (
+                f"{date_str}\n"
+                f"O {row['Open']:.2f}  H {row['High']:.2f}\n"
+                f"L {row['Low']:.2f}  C {row['Close']:.2f}\n"
+                f"V {int(row['Volume']):,}"
+            )
+            self._tooltip.setText(text)
+            self._tooltip.setPos(view_pt.x(), view_pt.y())
+            self._tooltip.show()
+        else:
+            # Cursor past the last bar — project forward using business days.
+            # ~ suffix flags this as an estimated future date.
+            self.sigCrosshairMoved.emit(None)
+            self._tooltip.hide()
+            extra = bar - (n - 1)
+            projected = self._df.index[-1] + pd.offsets.BDay(extra)
+            date_str = projected.strftime("%Y-%m-%d") + " ~"
+
+        self._date_axis_label.setText(f" {date_str} ")
+        self._date_axis_label.setPos(bar, y_range[0])
+        self._date_axis_label.show()
 
     # ----------------------------------------------------------------- export
 
