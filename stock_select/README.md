@@ -20,6 +20,10 @@ python -m pytest tests/        # 44 tests
 Constituent lists are read from `stock_tool/resources/*.csv`, so the desktop app
 and this page always scan the same universe.
 
+**Setting this up on a new machine, or publishing it to Cloudflare?** See
+[`SETUP.md`](SETUP.md) — bootstrap steps, the deployment spec, and the
+scoring conventions that are load-bearing.
+
 ## What the page shows
 
 | Section | Contents |
