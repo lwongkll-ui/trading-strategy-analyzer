@@ -131,7 +131,7 @@ GRADE_BANDS: list[tuple[float, str]] = [
 # ── fundamentals ──────────────────────────────────────────────────────────────
 
 FETCH_FUNDAMENTALS = True
-PROFILE_WORKERS = 8
+PROFILE_WORKERS = 2        # Yahoo throttles bursts of quoteSummary calls; low concurrency stays under it
 PROFILE_CACHE_DAYS = 7      # `.info` is slow; re-use it for a week
 PROFILE_CACHE = CACHE_DIR / "profiles.json"
 

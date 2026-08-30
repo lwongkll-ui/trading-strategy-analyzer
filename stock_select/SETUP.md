@@ -100,12 +100,24 @@ fundamentals" chip, and the skipped-tickers chip is a small number (a handful of
 recent listings, not dozens). Sectors in the heat map are real GICS names, not
 `Unclassified`.
 
-**Expect to spend time here.** The first run fetches ~440 profiles serially in
-8 threads and takes several minutes. Watch for:
+**Expect to spend time here.** The first run fetches ~440 profiles at low
+concurrency and takes several minutes. Watch for:
 
-- **Yahoo rate limiting.** If profiles come back empty en masse, lower
-  `PROFILE_WORKERS` in `config.py` (8 → 4) and re-run. `cache/profiles.json`
-  persists what succeeded, so a re-run only retries the gaps.
+- **Yahoo throttling.** Yahoo throttles bursts of calls to its `quoteSummary`
+  endpoint (behind `Ticker.info`) with a 401, and once tripped the block
+  persists for a while. `PROFILE_WORKERS` is therefore deliberately low (2). If
+  profiles still come back empty in bulk, you have hit the throttle — wait
+  ~30–60 min (or switch networks) and re-run. `cache/profiles.json` persists
+  what succeeded and **failed fetches are left unstamped**, so a plain re-run
+  retries only the gaps and the cache *converges over successive runs*. Do not
+  raise `PROFILE_WORKERS` to speed this up — a wide fan-out trips the throttle
+  and makes it worse.
+- **The cookie bootstrap fix.** yfinance seeds its auth cookie from
+  `fc.yahoo.com`, a tracking domain many networks drop; when that fails every
+  `.info` returns a 401 "Invalid Crumb" and all fundamentals silently go blank.
+  `fetcher._prime_profile_session()` works around this by warming the session on
+  `finance.yahoo.com` first. If you ever see universal "Invalid Crumb" errors,
+  that priming is the thing to check.
 - **Delisted or renamed tickers.** `stock_tool/resources/sp500_constituents.csv`
   is a static snapshot (365 names, not the full 503). If many are skipped, that
   list needs refreshing — a separate task, not a bug in the generator.
@@ -208,7 +220,7 @@ These are load-bearing. A change that violates one is a bug, not a refactor.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Every sector is `Unclassified`, quality/value all 50 | profiles empty | Yahoo rate limit — lower `PROFILE_WORKERS`, re-run; cache keeps partial progress |
+| Every sector is `Unclassified`, quality/value all 50 | profiles empty — 401 "Invalid Crumb" (cookie bootstrap) or a tripped `quoteSummary` throttle | Priming handles the cookie; for the throttle, keep `PROFILE_WORKERS` low, wait, and re-run — unstamped gaps retry and the cache converges |
 | Cloudflare serves a 404 | output is `stock_select.html` | regenerate with `--out reports\index.html` |
 | Many names skipped | <210 sessions of history | expected for recent listings; a large count means a stale constituent CSV |
 | Page loads but is empty below the filters | JS error | open devtools; the payload is `window.__SELECT__` |
