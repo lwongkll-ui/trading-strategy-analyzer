@@ -1,0 +1,64 @@
+# Stock Selection — containerised build + private serve via Cloudflare Tunnel.
+#
+#   builder     : regenerates site/index.html from live data on a weekday
+#                 21:00-HKT loop, into the shared ./site volume. Also converges
+#                 the 7-day fundamentals cache in ./cache across runs.
+#   web         : nginx serving ./site read-only. NO host ports — only
+#                 cloudflared reaches it over the internal network.
+#   cloudflared : outbound-only tunnel exposing web. Create the tunnel + Public
+#                 Hostname + Access (email OTP) policy in the Cloudflare Zero
+#                 Trust dashboard; put its token in docker/.env (TUNNEL_TOKEN).
+#
+# Mirrors the US_trading_platform pattern (nginx behind a per-app cloudflared,
+# pinned web IP so cloudflared's extra_hosts stays valid across restarts).
+
+services:
+  builder:
+    build:
+      context: ..
+      dockerfile: stock_select/Dockerfile
+    image: stock-select:latest
+    container_name: stocksel_builder
+    volumes:
+      - ./cache:/app/stock_select/cache      # persist profiles.json (convergence)
+      - ./site:/app/site                     # served page output
+    networks: [stocksel_net]
+    restart: unless-stopped
+
+  web:
+    image: nginx:alpine
+    container_name: stocksel_web
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./site:/usr/share/nginx/html:ro
+    networks:
+      stocksel_net:
+        # Pinned so cloudflared's extra_hosts entry stays valid across restarts
+        # (Docker's embedded DNS has been flaky on this host — see US_trading).
+        ipv4_address: 172.28.0.5
+    depends_on: [builder]
+    restart: unless-stopped
+
+  # Opt-in: `docker compose --profile tunnel up -d` once docker/.env holds the
+  # tunnel token. The base stack (builder + web) runs and serves locally without
+  # it. cloudflared reads TUNNEL_TOKEN natively from its container env.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: stocksel_cloudflared
+    command: tunnel --no-autoupdate run
+    profiles: [tunnel]
+    env_file:
+      - path: ./docker/.env                  # TUNNEL_TOKEN=...
+        required: false
+    networks: [stocksel_net]
+    extra_hosts:
+      - "web:172.28.0.5"
+    depends_on: [web]
+    restart: unless-stopped
+
+networks:
+  stocksel_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

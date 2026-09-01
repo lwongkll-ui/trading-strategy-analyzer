@@ -1,0 +1,14 @@
+# Build context is the repo root (for stock_select/Dockerfile). Keep it lean and
+# never bake host runtime state or secrets into the image.
+**/__pycache__/
+**/*.py[cod]
+.git/
+.venv/
+**/.venv/
+venv/
+env/
+stock_select/cache/
+stock_select/reports/
+stock_select/site/
+**/*.env
+*.env

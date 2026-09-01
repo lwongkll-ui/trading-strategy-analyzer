@@ -86,6 +86,14 @@ prompt in the last section of this file as your first message.
 
 ## The work
 
+> **Deployment is now containerised — see [`DOCKER.md`](DOCKER.md).** The Docker
+> stack (builder + nginx + Cloudflare Tunnel) is the chosen path and covers
+> Milestones **B** (publish) and **C** (access control) via the tunnel + Zero
+> Trust Access, and **D** (scheduled refresh) via the builder's internal loop.
+> Milestones B–D below describe the original `wrangler`/Task Scheduler approach
+> and are kept for reference. Milestone A (the live-fetch mechanics) applies
+> either way.
+
 ### Milestone A — first live run
 
 The fetch path is unit-tested but has never touched the network.

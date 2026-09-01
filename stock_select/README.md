@@ -22,7 +22,8 @@ and this page always scan the same universe.
 
 **Setting this up on a new machine, or publishing it to Cloudflare?** See
 [`SETUP.md`](SETUP.md) — bootstrap steps, the deployment spec, and the
-scoring conventions that are load-bearing.
+scoring conventions that are load-bearing. To run it as a container served
+privately through a Cloudflare Tunnel, see [`DOCKER.md`](DOCKER.md).
 
 ## What the page shows
 
