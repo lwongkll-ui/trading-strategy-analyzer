@@ -189,12 +189,24 @@ def fetch_profiles(tickers: list[str], refresh: bool = False,
         # fails is left unstamped (see _one) and simply retried on the next run,
         # so the on-disk cache converges over successive scheduled refreshes
         # rather than a single 401 masquerading as missing fundamentals.
+        #
+        # But bail out once it is clear the whole window is throttled: a long run
+        # of consecutive failures means every request is 401ing, so grinding the
+        # rest one-by-one (with retries and sleeps) would waste many minutes and
+        # only pokes Yahoo harder. Stop and leave the rest for the next run.
         missing = [t for t in stale if "_fetched_at" not in cache.get(t, {})]
         if missing:
             time.sleep(20)
+            consecutive_failures = 0
             for ticker in missing:
-                _, entry = _one(ticker, attempts=3)
+                _, entry = _one(ticker, attempts=2)
                 cache[ticker] = entry
+                if "_fetched_at" in entry:
+                    consecutive_failures = 0
+                else:
+                    consecutive_failures += 1
+                    if consecutive_failures >= 8:
+                        break
         _save_cache(cache)
 
     return {t: cache.get(t, {}) for t in tickers}
