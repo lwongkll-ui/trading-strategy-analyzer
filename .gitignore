@@ -28,6 +28,10 @@ silver_strategy/narrative_data.py
 .env
 *.env
 
+# Generated chart artifacts (regenerate: py macro/<script>.py)
+macro/*.png
+macro/*.csv
+
 # Scratch files
 silver_strategy/non_ascii.txt
 
