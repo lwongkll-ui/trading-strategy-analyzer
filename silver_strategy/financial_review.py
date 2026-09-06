@@ -200,6 +200,14 @@ def exec_message() -> str:
     L = [f"# Silver Miners — Financial Review ({F.AS_OF})",
          f"_{F.SILVER_REF}_", "", "## Executive summary"]
     L += [f"• {b}" for b in F.EXEC_SUMMARY]
+    # Staleness guard: if the narrative was generated from a different quarter
+    # than the tables, say so loudly instead of publishing a silent mismatch.
+    n_asof = getattr(F, "NARRATIVE_AS_OF", None)
+    d_asof = getattr(F, "AS_OF", None)
+    if n_asof and d_asof and n_asof != d_asof:
+        L += ["", f"> **STALE NARRATIVE** - tables are {d_asof} but the written "
+                  f"analysis was generated from {n_asof}. Treat the prose as out of "
+                  f"date; the numbers above are current."]
     note = getattr(F, "NARRATIVE_NOTE", None) or getattr(F, "DATA_NOTE", "")
     if note:
         L += ["", f"_{note}_"]

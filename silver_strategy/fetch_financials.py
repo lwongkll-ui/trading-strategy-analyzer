@@ -51,6 +51,12 @@ def val(series, i):
     return None if (v is None or (isinstance(v, float) and math.isnan(v))) else float(v)
 
 
+def fin(v):
+    """None unless v is a finite number. NaN is truthy in Python, so every
+    numeric guard below must go through this or NaN renders as 'nanx'."""
+    return v if isinstance(v, (int, float)) and math.isfinite(v) else None
+
+
 def m(v):  # plain millions, comma for thousands
     if v is None:
         return "—"
@@ -123,12 +129,21 @@ def fetch_one(tk: str) -> dict:
     yoy = (rev_q[0] / rev_q[4] - 1) if (n >= 5 and rev_q[0] and rev_q[4]) else None
 
     shares = shares_at(0)
-    price = float(t.history(period="5d")["Close"].iloc[-1])
-    mktcap = price * shares if shares else None
+    price = None
+    for per in ("5d", "1mo"):          # yfinance intermittently returns an empty frame
+        try:
+            h = t.history(period=per)["Close"].dropna()
+            if len(h):
+                price = float(h.iloc[-1]); break
+        except Exception:
+            pass
+    if price is None:
+        print(f"    ! {tk}: no price data - valuation columns will show N/M")
+    mktcap = price * shares if (price and shares) else None
     cash0, debt0, eq0 = val(cash, 0), val(debt, 0), val(equity, 0)
     netcash = (cash0 - debt0) if (cash0 is not None and debt0 is not None) else None
     eps_ttm = (ni_ttm / shares) if (ni_ttm is not None and shares) else None
-    pe = (price / eps_ttm) if (eps_ttm and eps_ttm > 0) else None
+    pe = (price / eps_ttm) if (price and eps_ttm and eps_ttm > 0) else None
     pb = (mktcap / eq0) if (mktcap and eq0) else None
     ev = (mktcap - netcash) if (mktcap is not None and netcash is not None) else None  # EV = mktcap + net debt
     ev_ebitda = (ev / ebitda_ttm) if (ev and ebitda_ttm and ebitda_ttm > 0) else None
@@ -138,6 +153,9 @@ def fetch_one(tk: str) -> dict:
     nd_ebitda = ((debt0 - cash0) / ebitda_ttm) if (debt0 is not None and cash0 is not None and ebitda_ttm) else None
     shares_yoy = (val(shares_row, 0) / val(shares_row, 4) - 1) if (n >= 5 and val(shares_row, 0) and val(shares_row, 4)) else None
 
+    pe, pb, ev_ebitda = fin(pe), fin(pb), fin(ev_ebitda)
+    fcf_yield, cur_ratio, de = fin(fcf_yield), fin(cur_ratio), fin(de)
+    nd_ebitda, mktcap, eps_ttm = fin(nd_ebitda), fin(mktcap), fin(eps_ttm)
     return dict(tk=tk, dates=dates, rev_q=rev_q, ni_q=ni_q, gm_q=gm_q, eps_q=eps_q, fcf_q=fcf_q,
                 rev_ttm=rev_ttm, ni_ttm=ni_ttm, fcf_ttm=fcf_ttm, ocf_ttm=ocf_ttm, yoy=yoy,
                 price=price, mktcap=mktcap, netcash=netcash, eps_ttm=eps_ttm, pe=pe, pb=pb,
@@ -229,11 +247,20 @@ def main():
     data = {}
     for tk in TICKERS:
         print(f"Fetching {tk}...")
-        data[tk] = fetch_one(tk)
+        try:
+            data[tk] = fetch_one(tk)
+        except Exception as e:
+            print(f"    ! {tk} FAILED ({type(e).__name__}: {str(e)[:90]}) - skipped")
+    if not data:
+        raise SystemExit("ERROR: every ticker failed; financials_data.py left unchanged.")
+    missing = [t for t in TICKERS if t not in data]
+    if missing:
+        print(f"WARNING: incomplete fetch, missing {missing} - keeping previous file")
+        raise SystemExit(1)
 
-    labels = [qlabel(ts) for ts in data["AG"]["dates"]]
+    labels = [qlabel(ts) for ts in data[next(iter(data))]["dates"]]
     tables = build(data, labels)
-    as_of = f"{labels[0]} ({data['AG']['dates'][0].date()})"
+    as_of = f"{labels[0]} ({data[next(iter(data))]['dates'][0].date()})"
 
     print(f"\nLatest quarter: {as_of}")
     for tk in TICKERS:
