@@ -60,6 +60,8 @@ docker compose --profile tunnel up -d
 - **Update after code changes:** `docker compose build && docker compose up -d`.
 - **Force a rebuild now:** `docker compose restart builder` (runs once on start),
   or `docker compose run --rm builder python main.py --out /app/site/index.html`.
+- **Local URL:** http://localhost:8088 (bound to 127.0.0.1 — this machine only,
+  bypasses the Access login). Public access stays via the tunnel.
 - **Stop:** `docker compose --profile tunnel down`.
 - **Same outbound IP** as the host, so Yahoo's throttle behaviour is unchanged —
   do not lower the daily spacing or raise `PROFILE_WORKERS` to rush convergence.
