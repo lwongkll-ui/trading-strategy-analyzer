@@ -208,7 +208,9 @@ tr.detail > td { background: var(--card2); padding: 0; border-bottom: 1px solid 
 .empty { padding: 40px 18px; text-align: center; color: var(--dim); }
 
 /* ── heat map ───────────────────────────────────────────────────────────── */
-.hm { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px 18px; }
+/* overflow-x lets wide sector rows scroll WITHIN the card on a phone instead of
+   stretching the whole page sideways (harmless on desktop, where it fits). */
+.hm { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px 18px; overflow-x: auto; }
 .hm-market + .hm-market { margin-top: 22px; }
 .hm-market > h3 { font-size: 13.5px; margin-bottom: 10px; }
 .hm-sector { margin-top: 12px; }
@@ -256,6 +258,18 @@ tr.detail > td { background: var(--card2); padding: 0; border-bottom: 1px solid 
 .disclaimer { margin-top: 20px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* ── phones ─────────────────────────────────────────────────────────────────
+   The layout already reflows (stacked cards, wrapped filters, the table and
+   heat map scroll within their own cards). These just tighten margins and make
+   the search box full-width so the narrow view reads well on an iPhone. */
+@media (max-width: 560px) {
+  body { padding: 18px 14px 52px; }
+  .head h1 { font-size: 21px; }
+  .hero .value { font-size: 42px; }
+  .fgroup { flex: 1 1 100%; }
+  input[type="search"] { min-width: 0; width: 100%; }
+}
 """
 
 
