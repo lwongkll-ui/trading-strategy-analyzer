@@ -148,6 +148,21 @@ def fetch_profiles(tickers: list[str], refresh: bool = False,
     cache = {} if refresh else _load_cache()
     stale = [t for t in tickers if not _is_fresh(cache.get(t, {}))]
 
+    # Bounded convergence (throttle-safe): fetch only a small batch of profiles
+    # per run so the burst stays under Yahoo's quoteSummary limit, instead of a
+    # ~300-name fan-out that trips the throttle and returns almost nothing (and
+    # keeps the IP throttled). Names that have never resolved go first, so sector
+    # coverage climbs over successive daily runs; a name reappears next run until
+    # it resolves. Skipped for an explicit --refresh (that intends a full pull).
+    limit = 0 if refresh else getattr(config, "PROFILE_FETCH_LIMIT", 0)
+    if limit and len(stale) > limit:
+        def _has_profile(t: str) -> bool:
+            e = cache.get(t, {})
+            return bool(e.get("sector") or e.get("marketCap"))
+        never = [t for t in stale if not _has_profile(t)]
+        expired = [t for t in stale if _has_profile(t)]
+        stale = (never + expired)[:limit]
+
     def _resolved(info: dict) -> bool:
         # A real constituent's profile always carries at least a sector or a
         # market cap. Anything without both came back empty — a throttled 401,

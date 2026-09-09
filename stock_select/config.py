@@ -133,6 +133,9 @@ GRADE_BANDS: list[tuple[float, str]] = [
 FETCH_FUNDAMENTALS = True
 PROFILE_WORKERS = 2        # Yahoo throttles bursts of quoteSummary calls; low concurrency stays under it
 PROFILE_CACHE_DAYS = 7      # `.info` is slow; re-use it for a week
+PROFILE_FETCH_LIMIT = 30   # max NEW profiles fetched per run — bounded so the
+                           # burst stays under Yahoo's throttle; coverage
+                           # converges across daily runs (0 = unlimited)
 PROFILE_CACHE = CACHE_DIR / "profiles.json"
 
 UNKNOWN_SECTOR = "Unclassified"
