@@ -6,6 +6,7 @@ numbers. Mirrors the convention used by ``btc_strategy/config.py`` and
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 # ── paths ─────────────────────────────────────────────────────────────────────
@@ -133,9 +134,14 @@ GRADE_BANDS: list[tuple[float, str]] = [
 FETCH_FUNDAMENTALS = True
 PROFILE_WORKERS = 2        # Yahoo throttles bursts of quoteSummary calls; low concurrency stays under it
 PROFILE_CACHE_DAYS = 7      # `.info` is slow; re-use it for a week
-PROFILE_FETCH_LIMIT = 30   # max NEW profiles fetched per run — bounded so the
-                           # burst stays under Yahoo's throttle; coverage
-                           # converges across daily runs (0 = unlimited)
+# Max NEW profiles fetched per run. Bounded so the burst stays under Yahoo's
+# throttle; coverage converges across daily runs. Env-overridable so the builder
+# can be paused/resumed without a rebuild:
+#   >0  cap NEW fetches to this many per run (default 30)
+#    0  unlimited (fetch every stale profile — the old hammer)
+#   <0  REST: fetch zero new profiles but keep serving the cached ones, so
+#       Yahoo's quoteSummary endpoint gets a full break to let the throttle lift
+PROFILE_FETCH_LIMIT = int(os.environ.get("STOCKSEL_PROFILE_FETCH_LIMIT", "30"))
 PROFILE_CACHE = CACHE_DIR / "profiles.json"
 
 UNKNOWN_SECTOR = "Unclassified"

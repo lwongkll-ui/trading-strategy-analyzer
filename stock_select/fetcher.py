@@ -155,7 +155,12 @@ def fetch_profiles(tickers: list[str], refresh: bool = False,
     # coverage climbs over successive daily runs; a name reappears next run until
     # it resolves. Skipped for an explicit --refresh (that intends a full pull).
     limit = 0 if refresh else getattr(config, "PROFILE_FETCH_LIMIT", 0)
-    if limit and len(stale) > limit:
+    if limit < 0:
+        # Rest mode: fetch nothing new so Yahoo's quoteSummary endpoint gets a
+        # complete break (to let a stuck throttle lift), while still serving
+        # whatever is already cached — the resolved sectors stay on the page.
+        stale = []
+    elif limit and len(stale) > limit:
         def _has_profile(t: str) -> bool:
             e = cache.get(t, {})
             return bool(e.get("sector") or e.get("marketCap"))

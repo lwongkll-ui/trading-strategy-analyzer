@@ -19,6 +19,12 @@ services:
       dockerfile: stock_select/Dockerfile
     image: stock-select:latest
     container_name: stocksel_builder
+    environment:
+      # TEMPORARY REST (started 2026-09-17): pause all quoteSummary fetches for a
+      # week so Yahoo's stuck throttle can lift. Cached sectors stay on the page.
+      # REVERT ~2026-09-24: set to "30" (or delete this line) + recreate builder
+      # to resume the bounded 30/run convergence.
+      STOCKSEL_PROFILE_FETCH_LIMIT: "-1"
     volumes:
       - ./cache:/app/stock_select/cache      # persist profiles.json (convergence)
       - ./site:/app/site                     # served page output
