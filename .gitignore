@@ -40,3 +40,6 @@ silver_strategy/non_ascii.txt
 .idea/
 .DS_Store
 Thumbs.db
+
+# User-supplied 100-year gold series (source/licence unknown - do not redistribute)
+macro/data/

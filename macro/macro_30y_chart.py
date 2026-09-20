@@ -53,7 +53,9 @@ def load():
          "sp":     yahoo("^GSPC"),
          "gold":   yahoo("GC=F"),
          "real":   fred("REAINTRATREARAT10Y"),      # Cleveland Fed 10Y real rate, 1982+
-         "tips":   fred("DFII10").resample("MS").mean()}  # market 10Y TIPS, 2003+
+         "tips":   fred("DFII10").resample("MS").mean(),   # market 10Y TIPS, 2003+
+         "be":     fred("T10YIE").resample("MS").mean(),   # 10Y breakeven inflation, 2003+
+         "n10":    fred("DGS10").resample("MS").mean()}    # 10Y nominal
     return {k: v[v.index >= START] for k, v in d.items()}
 
 
@@ -88,7 +90,7 @@ def main():
     d = load()
     sp_, ff_, un, spx, gold, rec = (d["spread"], d["ff"], d["unemp"],
                                     d["sp"], d["gold"], d["rec"])
-    real, tips = d["real"], d["tips"]
+    real, tips, be, n10 = d["real"], d["tips"], d["be"], d["n10"]
     # Rolling 36m correlation between the LEVEL of the real yield and log(gold).
     # Deliberately levels, not monthly changes: the month-to-month correlation of
     # gold returns vs changes in real yields is ~0 in every era (-0.02 / -0.14 /
@@ -98,7 +100,7 @@ def main():
     j = pd.DataFrame({"g": np.log(gold), "r": real.reindex(gold.index).ffill()}).dropna()
     corr = j["r"].rolling(36).corr(j["g"]).dropna()
 
-    fig, axes = plt.subplots(7, 1, figsize=(12.5, 20.5), sharex=True,
+    fig, axes = plt.subplots(8, 1, figsize=(12.5, 23.0), sharex=True,
                              gridspec_kw={"hspace": 0.17})
     fig.patch.set_facecolor(SURFACE)
 
@@ -160,6 +162,29 @@ def main():
     style(ax, "Gold vs real yield - 36m rolling correlation (levels)", AQUA, f"{corr.iloc[-1]:+.2f}",
           "negative = textbook (real yields up, gold down) · above 0 (shaded) = link inverted")
 
+    # 8 - nominal 10Y split into its two drivers. A rise driven by REAL yields
+    # raises gold's opportunity cost (hostile); one driven by BREAKEVENS is an
+    # inflation signal (friendly). Two lines rather than a stacked area because
+    # the real yield goes negative (2020-22) and stacks mis-render negatives.
+    ax = axes[7]; rec_bands(ax, rec)
+    ax.fill_between(tips.index, tips, 0, where=tips < 0, color=NEG, zorder=2, interpolate=True)
+    ax.axhline(0, color=INK2, lw=1.0, zorder=3)
+    ax.plot(tips.index, tips, color=BLUE, lw=2, zorder=4, label="real (10Y TIPS)")
+    ax.plot(be.index, be, color=ORANGE, lw=2, zorder=4, label="breakeven inflation")
+    ax.set_ylim(min(tips.min() * 1.35, -1.5), max(be.max(), tips.max()) + 1.5)
+    ax.legend(loc="upper left", bbox_to_anchor=(0.0, 0.80), frameon=False,
+              fontsize=9, labelcolor=INK2, ncol=2, handlelength=1.6)
+    # Direct labels at the right edge, in-series colour. The two series often
+    # converge (currently 0.08pp apart), so stagger them vertically or the
+    # labels overlap and both become unreadable.
+    ends = sorted(((tips.iloc[-1], BLUE), (be.iloc[-1], ORANGE)), key=lambda t: -t[0])
+    for (v, col), dy in zip(ends, (9, -13)):
+        ax.annotate(f"{v:.2f}%", (tips.index[-1], v), textcoords="offset points",
+                    xytext=(7, dy), fontsize=9, fontweight="bold", color=col,
+                    zorder=5, clip_on=False)
+    style(ax, "10Y nominal decomposed  (%)", INK, f"nominal {n10.iloc[-1]:.2f}%",
+          "series begin 2003 · nominal = real + breakeven · real<0 shaded (gold-friendly)")
+
     ax.xaxis.set_major_locator(mdates.YearLocator(3))
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
 
@@ -171,7 +196,7 @@ def main():
              ha="left", fontsize=10.5, color=INK2)
     fig.text(0.058, 0.016,
              "Sources: FRED (T10Y2Y, FEDFUNDS, UNRATE, USREC, REAINTRATREARAT10Y, DFII10), "
-             "Yahoo Finance (^GSPC, GC=F). Monthly; spread = monthly average of daily.",
+             "DGS10, T10YIE), Yahoo Finance (^GSPC, GC=F). Monthly; spread = monthly avg of daily.",
              ha="left", fontsize=8.5, color=INK2)
     fig.subplots_adjust(left=0.058, right=0.986, top=0.936, bottom=0.042)
 
@@ -180,7 +205,7 @@ def main():
 
     tbl = pd.DataFrame({"10Y-2Y": sp_, "FedFunds": ff_, "Unemp": un,
                         "SP500": spx, "Gold": gold, "RealYield": real,
-                        "GoldRealCorr": corr})
+                        "GoldRealCorr": corr, "TIPS10": tips, "Breakeven10": be})
     tbl.resample("YS").last().round(2).to_csv("macro_30y.csv")
     print("wrote macro_30y.csv  (annual table view)")
     print(tbl.resample("YS").last().round(2).tail(31).to_string())
