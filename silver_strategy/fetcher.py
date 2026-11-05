@@ -20,6 +20,62 @@ def fetch_ohlcv(ticker: str, period: str, interval: str) -> pd.DataFrame:
     return df
 
 
+def _row(df, *names):
+    """Newest-first list of floats for the first matching row label of a yfinance statement."""
+    for n in names:
+        if n in df.index:
+            return [float(x) for x in df.loc[n].tolist() if pd.notna(x)]
+    return []
+
+
+def _derive_info_from_statements(t, info: dict) -> None:
+    """Yahoo's .info endpoint is blocked (401 'unable to access this feature', since ~2026-11); the statement
+    endpoints still work. Fill the .info-style keys the scorer needs from the quarterly statements plus the
+    already-set marketCap. Only fills keys that are missing, so a working .info is left untouched.
+    Forward P/E, analyst target, beta etc. cannot be derived and stay None."""
+    def put(key, val):
+        if val is not None and not info.get(key):
+            info[key] = val
+    try:
+        inc, bs, cf = t.quarterly_income_stmt, t.quarterly_balance_sheet, t.quarterly_cashflow
+        mcap = info.get("marketCap")
+        rev = _row(inc, "Total Revenue")
+        ni = _row(inc, "Net Income Common Stockholders", "Net Income")
+        ebitda = _row(inc, "EBITDA", "Normalized EBITDA")
+        opi = _row(inc, "Operating Income")
+        fcf = _row(cf, "Free Cash Flow")
+        debt = _row(bs, "Total Debt")
+        cash = _row(bs, "Cash Cash Equivalents And Short Term Investments", "Cash And Cash Equivalents")
+        eq = _row(bs, "Stockholders Equity", "Common Stock Equity")
+        ca, cl = _row(bs, "Current Assets"), _row(bs, "Current Liabilities")
+        ttm = lambda v: sum(v[:4]) if len(v) >= 4 else None
+        rev_t, ni_t = ttm(rev), ttm(ni)
+        put("totalRevenue", rev_t)
+        put("netIncomeToCommon", ni_t)
+        put("ebitda", ttm(ebitda))
+        put("freeCashflow", ttm(fcf))
+        put("totalDebt", debt[0] if debt else None)
+        put("totalCash", cash[0] if cash else None)
+        if rev_t and opi and ttm(opi) is not None:
+            put("operatingMargins", ttm(opi) / rev_t)
+        if rev_t and ni_t is not None:
+            put("profitMargins", ni_t / rev_t)
+        if mcap and ni_t and ni_t > 0:
+            put("trailingPE", mcap / ni_t)
+        if mcap and eq and eq[0] > 0:
+            put("priceToBook", mcap / eq[0])
+        if ni_t is not None and eq and eq[0] > 0:
+            put("returnOnEquity", ni_t / eq[0])
+        if ca and cl and cl[0]:
+            put("currentRatio", ca[0] / cl[0])
+        if len(rev) >= 5 and rev[4] > 0:
+            put("revenueGrowth", rev[0] / rev[4] - 1)
+        if len(ni) >= 5 and ni[4] > 0:
+            put("earningsGrowth", ni[0] / ni[4] - 1)
+    except Exception:
+        pass
+
+
 def fetch_fundamentals(ticker: str) -> dict:
     t = yf.Ticker(ticker)
     try:
@@ -39,6 +95,8 @@ def fetch_fundamentals(ticker: str) -> dict:
             info["fiftyTwoWeekLow"] = fi.year_low
     except Exception:
         pass
+    if not info.get("totalRevenue"):          # .info blocked or empty -> rebuild from statements
+        _derive_info_from_statements(t, info)
 
     def _get(key, default=None):
         v = info.get(key, default)

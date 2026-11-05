@@ -90,6 +90,79 @@ def ladder_level(stock: dict, label: str):
 
 # ── summary generation ───────────────────────────────────────────────────────
 
+# ── flag checklist + verdict (replaces the 12:00 OpenClaw "Silver Miners Daily Report" job, 2026-11-02) ──
+# Thresholds are the ones that job's prompt used; change them here.
+FLAG_SILVER_BEAR = 65.0     # bearish: silver spot below
+FLAG_SVM_BEAR = 11.50       # bearish: SVM below
+FLAG_DXY_BEAR = 106.0       # bearish: DXY above
+FLAG_GS_BEAR = 80.0         # bearish: gold/silver ratio above
+BULL_SILVER = 75.0          # bull recovery: silver spot above
+BULL_STC_FAST = 80.0        # bull recovery: SVM STC-Fast above
+BULL_BREADTH_MIN = 4        # bull recovery: at least this many miners above their SMA50
+
+
+def compute_checklist(stocks: list[dict], macro: dict) -> dict:
+    """Bearish-flag and bull-recovery checks (True/False, None = data missing) plus a four-way verdict.
+    Verdict rules (defined 2026-11-02; the old AI job judged these freely):
+      BEAR CONFIRMED    silver, miners-below-SMA200 and SVM flags all set AND no bull check passes
+      BEARISH FLAG      2 or more bearish flags set (not confirmed)
+      RECOVERY BUILDING 2 or more bull checks pass AND at most 1 bearish flag
+      WATCH AND WAIT    everything else"""
+    by = {s["ticker"]: s for s in stocks}
+    svm = by.get("SVM")
+    silver, dxy, gs = macro.get("silver"), macro.get("dxy"), macro.get("gs_ratio")
+    n_total = len(stocks)
+    n_below = sum(1 for s in stocks if not s["above_sma200"])
+    n_above50 = sum(1 for s in stocks
+                    if ladder_level(s, "SMA 50") is not None and s["price"] > ladder_level(s, "SMA 50"))
+
+    def fl(value, ok):
+        return None if value is None else bool(ok)
+
+    flags = [
+        (f"Silver < ${FLAG_SILVER_BEAR:.0f}", fl(silver, silver is not None and silver < FLAG_SILVER_BEAR),
+         f"${silver:.2f}" if silver is not None else "n/a"),
+        ("Any miner < SMA200", fl(n_total, n_below > 0), f"{n_below} of {n_total}"),
+        (f"SVM < ${FLAG_SVM_BEAR:.2f}", fl(svm and svm["price"], svm is not None and svm["price"] < FLAG_SVM_BEAR),
+         f"${svm['price']:.2f}" if svm else "n/a"),
+        (f"DXY > {FLAG_DXY_BEAR:.0f}", fl(dxy, dxy is not None and dxy > FLAG_DXY_BEAR),
+         f"{dxy:.2f}" if dxy is not None else "n/a"),
+        (f"Gold/Silver > {FLAG_GS_BEAR:.0f}", fl(gs, gs is not None and gs > FLAG_GS_BEAR),
+         f"{gs:.1f}x" if gs is not None else "n/a"),
+    ]
+    stc = svm.get("stc_f") if svm else None
+    bulls = [
+        (f"Silver > ${BULL_SILVER:.0f}", fl(silver, silver is not None and silver > BULL_SILVER),
+         f"${silver:.2f}" if silver is not None else "n/a"),
+        (f"SVM STC-Fast > {BULL_STC_FAST:.0f}", fl(stc, stc is not None and stc > BULL_STC_FAST),
+         f"{stc:.0f}" if stc is not None else "n/a"),
+        (f"Broad momentum (>= {BULL_BREADTH_MIN} of {n_total} above SMA50)", fl(n_total, n_above50 >= BULL_BREADTH_MIN),
+         f"{n_above50} of {n_total}"),
+    ]
+    n_flags = sum(1 for _, v, _ in flags if v)
+    n_bulls = sum(1 for _, v, _ in bulls if v)
+    core = flags[0][1] and flags[1][1] and n_below >= max(1, n_total - 1) and flags[2][1]
+    if core and n_bulls == 0:
+        verdict, action = "BEAR CONFIRMED", "No new longs; wait for silver to reclaim its SMA200 before treating bounces as more than counter-trend."
+    elif n_flags >= 2:
+        verdict, action = "BEARISH FLAG", "Defensive: bearish conditions are set but the bear is not yet confirmed; tighten risk."
+    elif n_bulls >= 2 and n_flags <= 1:
+        verdict, action = "RECOVERY BUILDING", "Recovery conditions building; watch for follow-through before adding risk."
+    else:
+        verdict, action = "WATCH AND WAIT", "No decisive signal; no action."
+    return {"flags": flags, "bulls": bulls, "n_flags": n_flags, "n_bulls": n_bulls,
+            "verdict": verdict, "action": action}
+
+
+def render_checklist(c: dict) -> list[str]:
+    def row(item):
+        label, v, detail = item
+        return f"- {label}: {'YES' if v else 'NO' if v is not None else 'n/a'} ({detail})"
+    return ([f"**Bearish flags: {c['n_flags']} of {len(c['flags'])}**"] + [row(i) for i in c["flags"]]
+            + [f"**Bull recovery: {c['n_bulls']} of {len(c['bulls'])}**"] + [row(i) for i in c["bulls"]]
+            + [f"**Verdict: {c['verdict']}** - {c['action']}"])
+
+
 def compute_summary_data(stocks: list[dict], macro: dict, days: int, mode: str) -> dict:
     """Compute everything the summary needs, once. Renderers below format it
     three ways: markdown (.md record), Discord message text, and tables HTML."""
@@ -170,6 +243,7 @@ def compute_summary_data(stocks: list[dict], macro: dict, days: int, mode: str) 
         "ref_str": ref_date.strftime("%b %d") if ref_date is not None else f"{days} sessions ago",
         "headline": headline, "price_rows": price_rows, "silver_row": silver_row,
         "support_rows": support_rows, "trend": trend, "gate": gate, "break_str": break_str,
+        "check": compute_checklist(stocks, macro),
     }
 
 
@@ -196,7 +270,8 @@ def render_md(d: dict) -> str:
     L += ["```", "## Trend & silver gate", "", d["trend"]]
     if d["gate"]:
         L += ["", d["gate"]]
-    L += ["", f"_Fundamentals omitted (Yahoo crumb 401s); price/technical/macro only. "
+    L += ["", "## Flag checklist & verdict", ""] + render_checklist(d["check"])
+    L += ["", f"_Fundamentals rebuilt from quarterly statements (Yahoo .info blocked; no forward P/E or analyst data). "
           f"Generated post_to_discord.py · {datetime.now():%Y-%m-%d %H:%M}._"]
     return "\n".join(L)
 
@@ -210,6 +285,7 @@ def render_message(d: dict) -> str:
     L.append(d["trend"])
     if d["gate"]:
         L += ["", f"**{d['gate']}**"]
+    L += [""] + render_checklist(d["check"])
     L += ["", "_Tables (price moves + critical support) in the image above._"]
     return "\n".join(L)
 
